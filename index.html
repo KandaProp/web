@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการการอนุมัติ</title>
+<style>
+  html, body, iframe {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    border: none;
+  }
+</style>
+</head>
+<body>
+  <iframe id="myframe" width="100%" height="100%" frameborder="0"></iframe>
+
+  <script>
+    const apps = new URL(window.location);
+    const formUrl = apps.searchParams.get('apps');
+    const url = decodeURIComponent(formUrl);
+    document.getElementById('myframe').src = url;
+  </script>
+</body>
+</html>
