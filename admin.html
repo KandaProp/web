@@ -1,0 +1,778 @@
+
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Dashboard - Profiles (Realtime)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+  
+/* ===== TABLE BASE STYLE ===== */
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table th, .table td {
+  text-align: center;
+  vertical-align: middle;
+  padding: 12px;
+  white-space: nowrap;
+}
+
+.table thead th {
+  background: #eddff2;
+  font-weight: 600;
+}
+
+.table td, .table th {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table tbody tr:hover {
+  background: #f5f0f7;
+}
+
+/* Avatar responsive */
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid #ddd;
+  object-fit: cover;
+  transition: 0.2s;
+}
+.avatar:hover {
+  transform: scale(1.12);
+}
+
+/* ===== PAGINATION ===== */
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.pagination button {
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.pagination button.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+/* ===== RESPONSIVE MODE ===== */
+
+/* Mobile: Table becomes card layout */
+@media (max-width: 768px) {
+  .table thead {
+    display: none;
+  }
+
+  .table tr {
+    display: block;
+    margin-bottom: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+    background: white;
+  }
+
+  .table td {
+    display: flex;
+    justify-content: space-between;
+    text-align: right;
+    padding: 8px 6px;
+    border-bottom: none;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    font-weight: bold;
+    text-align: left;
+    padding-right: 10px;
+  }
+
+  .avatar {
+    width: 46px;
+    height: 46px;
+  }
+
+  .btnEdit, .btnDelete, .btnStatus {
+    padding: 4px 8px !important;
+    font-size: 12px;
+  }
+}
+/* icon button base */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;          /* ลดจาก 8px → 4px */
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+  margin-right: 2px;     /* ลดจาก 6px → 2px */
+}
+
+/* svg icon style */
+.icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  color: #efe6f5; /* gray-800 */
+}
+
+/* hover visual */
+.icon-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(31,41,55,0.06);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+/* individual colors (optional) */
+.btnEdit .icon { color: #2605b5; }      /* amber-ish for edit */
+.btnStatus .icon { color: #006600; }    /* indigo-ish for status */
+.btnDelete .icon { color: #dc2626; }    /* red for delete */
+
+/* small screens: tighten padding */
+@media (max-width: 768px) {
+  .icon-btn { padding: 6px; margin-right: 4px; }
+  .icon { width: 16px; height: 16px; }
+}
+/* Buttons top-right */
+#btnExport {
+  background: #5cb85c;
+  transition: 0.2s;
+}
+#btnExport:hover {
+  background: #4aa44a;
+}
+
+#btnLogout {
+  background: #FF7B7B;
+  transition: 0.2s;
+}
+#btnLogout:hover {
+  background: #FF545E;
+}
+/* ปรับแถว controls ให้ responsive */
+.controls-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;          /* สำคัญมาก — อนุญาตให้ขึ้นบรรทัดใหม่ */
+}
+
+.controls-bar > * {
+  flex: 1;                  /* ให้ input, select ขยายเต็มพื้นที่ */
+  min-width: 150px;         /* ป้องกันบีบจนเละ */
+}
+
+/* ปุ่ม Refresh ไม่ควรยืดเต็มแถว */
+.controls-refresh {
+  flex: 0 0 auto;
+}
+
+/* สำหรับหน้าจอเล็กมาก (เช่น iPhone) */
+@media (max-width: 480px) {
+  .controls-bar > * {
+    min-width: 100px;
+  }
+}
+/* ==== สีสถานะแบบ Pastel ==== */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+/* รออนุมัติ – เหลืองพาสเทล */
+.status-wait {
+  background: #fff7d6;
+  color: #b7791f;
+  border: 1px solid #f6e8b5;
+}
+
+/* อนุมัติแล้ว – เขียวพาสเทล */
+.status-approved {
+  background: #d7f5e6;
+  color: #0f7a46;
+  border: 1px solid #b4e8cf;
+}
+
+/* ไม่อนุมัติ – แดงพาสเทล */
+.status-reject {
+  background: #ffe0e0;
+  color: #b42323;
+  border: 1px solid #f5bcbc;
+}
+.pastel-header {
+  background: #eddff2 !important;
+}
+
+  </style>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-6xl mx-auto">
+    <!-- Login / Header -->
+    <div id="loginBox" class="max-w-md mx-auto bg-white p-6 rounded shadow mb-6">
+      <h2 class="text-xl font-bold mb-3">Admin Login</h2>
+      <p class="text-sm text-gray-600 mb-4">กรุณาใส่รหัสผ่านเพื่อเข้าสู่หน้าจัดการ (เก็บ password ในไฟล์ตามที่ตกลง)</p>
+      <input id="adminPassword" type="password" placeholder="Password" class="w-full p-2 border rounded mb-3" />
+      <button id="btnLogin" class="w-full bg-blue-600 text-white p-2 rounded">เข้าสู่ระบบ</button>
+    </div>
+
+    <div id="dashboard" class="hidden">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-2xl font-bold">Admin Dashboard</h1>
+        <div class="flex gap-2">
+          <button id="btnExport" class="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" 
+              fill="currentColor" viewBox="0 0 16 16">
+            <path fill-rule="evenodd" d="M14 4.5V11h-1V4.5h-2A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5zM7.86 14.841a1.13 1.13 0 0 0 .401.823q.195.162.479.252.284.091.665.091.507 0 .858-.158.355-.158.54-.44a1.17 1.17 0 0 0 .187-.656q0-.336-.135-.56a1 1 0 0 0-.375-.357 2 2 0 0 0-.565-.21l-.621-.144a1 1 0 0 1-.405-.176.37.37 0 0 1-.143-.299q0-.234.184-.384.188-.152.513-.152.214 0 .37.068a.6.6 0 0 1 .245.181.56.56 0 0 1 .12.258h.75a1.1 1.1 0 0 0-.199-.566 1.2 1.2 0 0 0-.5-.41 1.8 1.8 0 0 0-.78-.152q-.44 0-.777.15-.336.149-.527.421-.19.273-.19.639 0 .302.123.524t.351.367q.229.143.54.213l.618.144q.31.073.462.193a.39.39 0 0 1 .153.326.5.5 0 0 1-.085.29.56.56 0 0 1-.255.193q-.168.07-.413.07-.176 0-.32-.04a.8.8 0 0 1-.249-.115.58.58 0 0 1-.255-.384zm-3.726-2.909h.893l-1.274 2.007 1.254 1.992h-.908l-.85-1.415h-.035l-.853 1.415H1.5l1.24-2.016-1.228-1.983h.931l.832 1.438h.036zm1.923 3.325h1.697v.674H5.266v-3.999h.791zm7.636-3.325h.893l-1.274 2.007 1.254 1.992h-.908l-.85-1.415h-.035l-.853 1.415h-.861l1.24-2.016-1.228-1.983h.931l.832 1.438h.036z"/>
+          </svg>
+          Download
+        </button>
+          <button id="btnLogout" class="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 12H20M20 12L17 9M20 12L17 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 12C4 7.58172 7.58172 4 12 4M12 20C9.47362 20 7.22075 18.8289 5.75463 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          Logout
+        </button>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="bg-white p-4 rounded shadow mb-4 controls-bar">
+  <input id="searchInput" type="text" placeholder="ค้นหา ชื่อ / ตำแหน่ง / แผนก" class="p-2 border rounded" />
+
+  <select id="statusFilter" class="p-2 border rounded">
+    <option value="">สถานะทั้งหมด</option>
+    <option value="รออนุมัติ">Pending</option>
+    <option value="อนุมัติแล้ว">Approve</option>
+    <option value="ไม่อนุมัติ">Rejected</option>
+  </select>
+
+  <select id="rowsPerPageSelect" class="p-2 border rounded">
+    <option value="10">10 แถว</option>
+    <option value="20">20 แถว</option>
+    <option value="50">50 แถว</option>
+    <option value="100">100 แถว</option>
+  </select>
+
+  <button id="btnRefresh" class="bg-blue-400 px-3 py-2 rounded controls-refresh">Refresh</button>
+</div>
+
+
+      <!-- table -->
+    <div class="bg-white p-4 rounded shadow table-container">
+      <table class="w-full text-sm table">
+        <thead>
+          <tr class="pastel-header text-gray-700 border-b border-blue-100">
+            <th>เวลาบันทึก</th>
+            <th>รูป</th>
+            <th>ชื่อ-สกุล</th>
+            <th>ตำแหน่ง</th>
+            <th>โครงการ/แผนก</th>
+            <th>บริษัท</th>
+            <th>สถานะ</th>
+            <th>การจัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div id="pagination" class="pagination"></div>
+    </div>
+    </div>
+
+    <!-- Edit Modal (hidden) -->
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center">
+      <div class="bg-white p-4 rounded shadow max-w-lg w-full">
+        <h3 class="font-bold mb-2">แก้ไขรายการ</h3>
+        <div class="space-y-2">
+          <div>
+              <label class="text-gray-600 text-sm font-semibold">ชื่อ-สกุล</label>
+              <input id="edit_fullName" class="w-full p-2 border rounded" />
+          </div>
+          <div>
+              <label class="text-gray-600 text-sm font-semibold">ตำแหน่ง</label>
+              <input id="edit_position" class="w-full p-2 border rounded" />
+          </div>
+          <div>
+              <label class="text-gray-600 text-sm font-semibold">แผนก</label>
+              <input id="edit_department" class="w-full p-2 border rounded" />
+          </div>
+          <div>
+              <label class="text-gray-600 text-sm font-semibold">ชื่อเล่น</label>
+              <input id="edit_nickname" class="w-full p-2 border rounded" />
+          </div>
+          <div>
+              <label class="text-gray-600 text-sm font-semibold">บริษัท</label>
+              <input id="edit_company" class="w-full p-2 border rounded" />
+          </div>
+          <div>
+              <label class="text-gray-600 text-sm font-semibold">สถานะ</label>
+              <select id="edit_status" class="w-full p-2 border rounded">
+            <option value="รออนุมัติ">Pending</option>
+            <option value="อนุมัติแล้ว">Approve</option>
+            <option value="ไม่อนุมัติ">Rejected</option>
+          </select>
+          </div>
+          
+        </div>
+        <div class="mt-3 flex gap-2 justify-end">
+          <button id="btnCancelEdit" class="px-3 py-2 border rounded">ยกเลิก</button>
+          <button id="btnSaveEdit" class="px-3 py-2 bg-blue-600 text-white rounded">บันทึก</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+// ---------- CONFIG (แก้ค่าให้ตรงกับโปรเจคของคุณ) ----------
+const SUPABASE_URL = "https://rpwlkqwupevtguzckapn.supabase.co"; // ใส่ของคุณ
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJwd2xrcXd1cGV2dGd1emNrYXBuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNTc0MjIsImV4cCI6MjA3OTYzMzQyMn0.fU75o1OLm0RPasCBAxYX3U3lN7EjyHdfTHHif6sACDQ"; // ใส่ของคุณ
+// --- ถ้าต้องการให้ admin ทำ update/delete ต้องใช้ service_role key (เก็บในไฟล์ตามที่ตกลง)
+const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJwd2xrcXd1cGV2dGd1emNrYXBuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDA1NzQyMiwiZXhwIjoyMDc5NjMzNDIyfQ.qTm6cAlBqdfcrRW_cI-QEFQD_nopvpzR-oorLhLmNcQ"; // *** ใส่ service role key ถ้าต้องการ edit/delete ผ่าน admin page (ถ้าไม่มีก็จะพยายามใช้ anon และอาจล้มเหลว)
+const ADMIN_PASSWORD = "Kanda1234"; // ตามที่คุณกำหนด
+const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/6915/6915987.png"; // ใช้ path ของไฟล์ที่คุณอัพโหลด
+
+// ---------- Supabase clients ----------
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+
+// admin client (service role) - only if provided
+let adminClient = null;
+if (SUPABASE_SERVICE_KEY && !SUPABASE_SERVICE_KEY.startsWith('REPLACE')) {
+  adminClient = supabase.createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+}
+
+// ========================= DATA =========================
+let DATA = [];
+let FILTERED = [];
+let currentPage = 1;
+let rowsPerPage = 10;
+
+// UI refs
+const loginBox = document.getElementById('loginBox');
+const dashboard = document.getElementById('dashboard');
+const btnLogin = document.getElementById('btnLogin');
+const btnLogout = document.getElementById('btnLogout');
+const btnExport = document.getElementById('btnExport');
+const searchInput = document.getElementById('searchInput');
+const statusFilter = document.getElementById('statusFilter');
+const btnRefresh = document.getElementById('btnRefresh');
+const tableBody = document.getElementById('tableBody');
+
+// Edit modal
+const editModal = document.getElementById('editModal');
+const btnCancelEdit = document.getElementById('btnCancelEdit');
+const btnSaveEdit = document.getElementById('btnSaveEdit');
+
+let editingId = null;
+
+// ---------- Auth (simple file-based password) ----------
+function checkAuth() {
+  const logged = localStorage.getItem('admin_logged');
+  if (logged === '1') {
+    loginBox.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    initDashboard();
+  } else {
+    loginBox.classList.remove('hidden');
+    dashboard.classList.add('hidden');
+  }
+}
+
+btnLogin.addEventListener('click', () => {
+  const v = document.getElementById('adminPassword').value || '';
+  if (v === ADMIN_PASSWORD) {
+    localStorage.setItem('admin_logged', '1');
+    checkAuth();
+  } else {
+    Swal.fire('รหัสผ่านไม่ถูกต้อง', '', 'error');
+  }
+});
+
+btnLogout.addEventListener('click', () => {
+  localStorage.removeItem('admin_logged');
+  location.reload();
+});
+
+// ---------- Data load & render ----------
+async function loadData() {
+  const { data, error } = await db.from('profiles').select('*').order('created_at', { ascending: false });
+  if (error) {
+    console.error(error);
+    Swal.fire('Error loading data', error.message || JSON.stringify(error), 'error');
+    return;
+  }
+  DATA = data || [];
+  applyFilterAndRender();
+}
+
+function applyFilterAndRender() {
+  const q = (searchInput.value || '').toLowerCase();
+  const st = statusFilter.value;
+
+  FILTERED = DATA.filter(r => {
+    if (st && r.status !== st) return false;
+    if (!q) return true;
+    return [r.fullName, r.position, r.department, r.company, r.displayName]
+      .some(f => (f || '').toLowerCase().includes(q));
+  });
+
+  currentPage = 1;
+  renderTableWithPagination();
+}
+
+function renderTable(list) {
+  tableBody.innerHTML = '';
+  for (const row of list) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td data-label="เวลาบันทึก">${row.created_at ? new Date(row.created_at).toLocaleString('th-TH') : ''}</td>
+      <td data-label="รูป"><img src="${row.profileUrl || DEFAULT_AVATAR}" class="avatar" onerror="this.src='${DEFAULT_AVATAR}'"/></td>
+      <td data-label="ชื่อ-สกุล">${escapeHtml(row.fullName || '')}</td>
+      <td data-label="ตำแหน่ง">${escapeHtml(row.position || '')}</td>
+      <td data-label="แผนก">${escapeHtml(row.department || '')}</td>
+      <td data-label="บริษัท">${escapeHtml(row.company || '')}</td>
+      <td data-label="สถานะ">
+  <span class="${getStatusClass(row.status)} status-badge">
+    ${escapeHtml(row.status || '')}
+  </span>
+</td>
+
+      <td data-label="การจัดการ">
+        <!-- Edit (pencil) -->
+        <button data-id="${row.userId}" class="btnEdit icon-btn mr-0.5" 
+                title="แก้ไข" aria-label="แก้ไข" type="button">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"
+              xmlns="http://www.w3.org/2000/svg" stroke="currentColor"
+              stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18.9445 9.1875L14.9445 5.1875M18.9445 9.1875L13.946 14.1859C13.2873 14.8446 12.4878 15.3646 11.5699 15.5229C10.6431 15.6828 9.49294 15.736 8.94444 15.1875C8.39595 14.639 8.44915 13.4888 8.609 12.562C8.76731 11.6441 9.28735 10.8446 9.946 10.1859L14.9445 5.1875M18.9445 9.1875C18.9445 9.1875 21.9444 6.1875 19.9444 4.1875C17.9444 2.1875 14.9445 5.1875 14.9445 5.1875M20.5 12C20.5 18.5 18.5 20.5 12 20.5C5.5 20.5 3.5 18.5 3.5 12C3.5 5.5 5.5 3.5 12 3.5"/>
+          </svg>
+        </button>
+
+        <!-- Status (check/refresh) -->
+        <button data-id="${row.userId}" class="btnStatus icon-btn mr-0.5" 
+        title="เปลี่ยนสถานะ" aria-label="เปลี่ยนสถานะ" type="button">
+
+        <svg class="icon" viewBox="0 0 512 512" fill="currentColor" 
+            xmlns="http://www.w3.org/2000/svg">
+          <path d="M256,27.5c-61.03,0-118.42,23.77-161.57,66.93C51.27,137.58,27.5,194.97,27.5,256
+            s23.77,118.42,66.93,161.57C137.58,460.73,194.97,484.5,256,484.5s118.42-23.77,161.57-66.93
+            C460.73,374.42,484.5,317.03,484.5,256 s-23.77-118.42-66.93-161.57C374.42,51.27,317.03,27.5,256,27.5z 
+            M256,452.5c-108.35,0-196.5-88.15-196.5-196.5 S147.65,59.5,256,59.5S452.5,147.65,452.5,256
+            S364.35,452.5,256,452.5z">
+          </path>
+          <path d="M347.7,131.81c-16.03,0-31.09,6.24-42.43,17.57l-85.16,85.16l-13.39-13.39
+            c-11.33-11.33-26.4-17.58-42.43-17.58c-16.03,0-31.1,6.24-42.43,17.57c-11.32,11.32-17.56,26.39-17.56,42.43
+            s6.24,31.1,17.56,42.43l57.17,57.17c10.97,10.97,25.56,17,41.08,17s30.1-6,41.08-17l128.94-128.94
+            c11.32-11.32,17.56-26.39,17.56-42.43c0-16.04-6.24-31.1-17.56-42.42C378.8,138.05,363.73,131.81,347.7,131.81z 
+            M367.5,211.61 L238.57,340.55c-4.93,4.93-11.48,7.64-18.45,7.64s-13.52-2.71-18.45-7.64l-57.17-57.17
+            c-5.28-5.28-8.18-12.31-8.18-19.8 s2.91-14.52,8.19-19.8c5.29-5.29,12.32-8.2,19.8-8.2s14.51,2.91,19.8,8.2l24.71,24.7
+            c6.25,6.25,16.38,6.25,22.63,0l96.47-96.47c5.29-5.29,12.32-8.2,19.8-8.2s14.51,2.91,19.8,8.2
+            c5.28,5.28,8.18,12.31,8.18,19.8S372.78,206.33,367.5,211.61z">
+          </path>
+        </svg>
+
+      </button>
+
+        <!-- Delete (trash) -->
+        <button data-id="${row.userId}" class="btnDelete icon-btn mr-0.5"
+        title="ลบ" aria-label="ลบ" type="button">
+
+        <svg class="icon" viewBox="-5 0 85 85" 
+            xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor">
+
+          <g transform="translate(-837 -670)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M905.8,703.3H843.7a4.653,4.653,0,0,1-4.6-4.6v-9.2a4.653,4.653,0,0,1,4.6-4.6h62.1a4.653,4.653,0,0,1,4.6,4.6v9.2A4.653,4.653,0,0,1,905.8,703.3Z"/>
+            <path d="M901.6,706v41c-.7.5-3.2,1.9-10,3.1a108.881,108.881,0,0,1-17.2,1.5,92.907,92.907,0,0,1-16.8-1.5c-6.6-1.2-8.9-2.5-9.6-3V706h53.6m4-4H844v45.7c0,5.3,18.5,7.8,30.4,7.8s31.2-2.5,31.2-7.8V702Z" stroke-width="4"/>
+            <line y2="12" transform="translate(862.7 721.6)"/>
+            <line y2="19" transform="translate(874.9 718.1)"/>
+            <line y2="12" transform="translate(886.9 721.6)"/>
+            <path d="M859,684.2S857.3,672,873.9,672s16.7,12.2,16.7,12.2"/>
+          </g>
+
+        </svg>
+
+      </button>
+      </td>
+    `;
+    tableBody.appendChild(tr);
+  }
+  attachRowEvents();
+}
+
+
+function attachRowEvents() {
+  document.querySelectorAll('.btnEdit').forEach(b => b.onclick = onEditClick);
+  document.querySelectorAll('.btnDelete').forEach(b => b.onclick = onDeleteClick);
+  document.querySelectorAll('.btnStatus').forEach(b => b.onclick = onStatusClick);
+}
+
+function onEditClick(e) {
+  const id = e.currentTarget.dataset.id;
+  const row = DATA.find(r => r.userId === id);
+  if (!row) return;
+  editingId = id;
+  document.getElementById('edit_fullName').value = row.fullName || '';
+  document.getElementById('edit_position').value = row.position || '';
+  document.getElementById('edit_department').value = row.department || '';
+  document.getElementById('edit_nickname').value = row.nickname || '';
+  document.getElementById('edit_company').value = row.company || '';
+  document.getElementById('edit_status').value = row.status || 'Pending';
+  editModal.classList.remove('hidden');
+  editModal.style.display = 'flex';
+}
+
+btnCancelEdit.addEventListener('click', () => {
+  editingId = null;
+  editModal.classList.add('hidden');
+  editModal.style.display = 'none';
+});
+
+btnSaveEdit.addEventListener('click', async () => {
+  if (!editingId) return;
+  const payload = {
+    fullName: document.getElementById('edit_fullName').value,
+    position: document.getElementById('edit_position').value,
+    department: document.getElementById('edit_department').value,
+    nickname: document.getElementById('edit_nickname').value,
+    company: document.getElementById('edit_company').value,
+    status: document.getElementById('edit_status').value
+  };
+
+  try {
+    if (adminClient) {
+      const { error } = await adminClient.from('profiles').update(payload).eq('userId', editingId);
+      if (error) throw error;
+      Swal.fire('บันทึกสำเร็จ', '', 'success');
+    } else {
+      // try using anon client (may fail if RLS blocks updates)
+      const { error } = await db.from('profiles').update(payload).eq('userId', editingId);
+      if (error) throw error;
+      Swal.fire('บันทึกสำเร็จ (ผ่าน anon)', '', 'success');
+    }
+    editModal.classList.add('hidden');
+    editModal.style.display = 'none';
+  } catch (err) {
+    console.error(err);
+    Swal.fire('Error', err.message || JSON.stringify(err), 'error');
+  }
+});
+
+async function onDeleteClick(e) {
+  const id = e.currentTarget.dataset.id;
+  const result = await Swal.fire({ title: 'ยืนยันการลบ?', showCancelButton: true });
+  if (!result.isConfirmed) return;
+  try {
+    if (adminClient) {
+      const { error } = await adminClient.from('profiles').delete().eq('userId', id);
+      if (error) throw error;
+    } else {
+      const { error } = await db.from("profiles").delete().eq("userId", id);
+      if (error) throw error;
+    }
+    Swal.fire('ลบสำเร็จ', '', 'success');
+  } catch (err) {
+    console.error(err);
+    Swal.fire('Error', err.message || JSON.stringify(err), 'error');
+  }
+}
+
+async function onStatusClick(e) {
+  const id = e.currentTarget.dataset.id;
+  const row = DATA.find(r => r.userId === id);
+  if (!row) return;
+  const chosen = await Swal.fire({
+    title: 'เปลี่ยนสถานะ',
+    input: 'select',
+    inputOptions: { 'Pending':'Pending','Approve':'Approve','Rejected':'Rejected' },
+    inputValue: row.status || 'Pending',
+    showCancelButton: true
+  });
+  if (!chosen.value) return;
+  try {
+    if (adminClient) {
+      const { error } = await adminClient.from('profiles').update({ status: chosen.value }).eq('userId', id);
+      if (error) throw error;
+    } else {
+      const { error } = await db.from('profiles').update({ status: chosen.value }).eq('userId', id);
+      if (error) throw error;
+    }
+    Swal.fire('เปลี่ยนสถานะเรียบร้อย', '', 'success');
+  } catch (err) {
+    console.error(err);
+    Swal.fire('Error', err.message || JSON.stringify(err), 'error');
+  }
+}
+
+// ---------- realtime subscription ----------
+function initRealtime() {
+  // supabase v2 channel style
+  try {
+    db.channel('profiles-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+        // payload: { eventType, new, old }
+        if (payload.eventType === 'INSERT') {
+          DATA.unshift(payload.new);
+        } else if (payload.eventType === 'UPDATE') {
+          DATA = DATA.map(r => r.userId === payload.new.userId ? payload.new : r);
+        } else if (payload.eventType === 'DELETE') {
+          DATA = DATA.filter(r => r.userId !== payload.old.userId);
+        }
+        applyFilterAndRender();
+      })
+      .subscribe();
+  } catch (err) {
+    console.warn('Realtime subscribe failed', err);
+  }
+}
+
+// ---------- Export Excel ----------
+btnExport.addEventListener('click', async () => {
+  const data = FILTERED.length ? FILTERED : DATA;
+  if (!data.length) {
+    Swal.fire('ไม่มีข้อมูลให้ดาวน์โหลด', '', 'info');
+    return;
+  }
+  // prepare rows
+  const rows = data.map(r => ({
+    userId: r.userId,
+    created_at: r.created_at,
+    displayName: r.displayName,
+    profileUrl: r.profileUrl,
+    fullName: r.fullName,
+    position: r.position,
+    department: r.department,
+    nickname: r.nickname,
+    company: r.company,
+    status: r.status
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'profiles');
+  XLSX.writeFile(wb, 'profiles.xlsx');
+});
+
+function renderTableWithPagination() {
+  const start = (currentPage - 1) * rowsPerPage;
+  const end = start + rowsPerPage;
+  const pageItems = FILTERED.slice(start, end);
+
+  renderTable(pageItems);
+  renderPagination();
+}
+
+function renderPagination() {
+  const totalPages = Math.ceil(FILTERED.length / rowsPerPage);
+  const container = document.getElementById("pagination");
+  container.innerHTML = "";
+
+  if (totalPages <= 1) return;
+
+  // ปุ่มไปหน้าแรก <<
+  const firstBtn = document.createElement("button");
+  firstBtn.textContent = "<<";
+  firstBtn.onclick = () => {
+    currentPage = 1;
+    renderTableWithPagination();
+  };
+  container.appendChild(firstBtn);
+
+  // ปุ่มก่อนหน้า <
+  const prevBtn = document.createElement("button");
+  prevBtn.textContent = "<";
+  prevBtn.onclick = () => {
+    if (currentPage > 1) currentPage--;
+    renderTableWithPagination();
+  };
+  container.appendChild(prevBtn);
+
+  // ปุ่มเลขหน้า
+  for (let i = 1; i <= totalPages; i++) {
+    const btn = document.createElement("button");
+    btn.textContent = i;
+    btn.className = (i === currentPage) ? "active" : "";
+    btn.onclick = () => {
+      currentPage = i;
+      renderTableWithPagination();
+    };
+    container.appendChild(btn);
+  }
+
+  // ปุ่มถัดไป >
+  const nextBtn = document.createElement("button");
+  nextBtn.textContent = ">";
+  nextBtn.onclick = () => {
+    if (currentPage < totalPages) currentPage++;
+    renderTableWithPagination();
+  };
+  container.appendChild(nextBtn);
+
+  // ปุ่มไปหน้าสุดท้าย >>
+  const lastBtn = document.createElement("button");
+  lastBtn.textContent = ">>";
+  lastBtn.onclick = () => {
+    currentPage = totalPages;
+    renderTableWithPagination();
+  };
+  container.appendChild(lastBtn);
+}
+
+document.getElementById("rowsPerPageSelect").addEventListener("change", (e) => {
+  rowsPerPage = parseInt(e.target.value);
+  currentPage = 1;
+  renderTableWithPagination();
+});
+
+
+// ---------- helpers ----------
+function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+
+searchInput.addEventListener('input', applyFilterAndRender);
+statusFilter.addEventListener('change', applyFilterAndRender);
+btnRefresh.addEventListener('click', loadData);
+
+// ---------- INIT dashboard after login ----------
+async function initDashboard() {
+  // show dashboard, load data, subscribe
+  await loadData();
+  initRealtime();
+}
+function getStatusClass(status) {
+  switch (status) {
+    case "Approve":
+      return "status-approved";
+    case "Rejected":
+      return "status-reject";
+    default:
+      return "status-wait"; // รออนุมัติ
+  }
+}
+
+// ---------- start ----------
+checkAuth();
+</script>
+</body>
+</html>
